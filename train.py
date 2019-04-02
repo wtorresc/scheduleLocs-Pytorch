@@ -161,10 +161,10 @@ def train(args, model, device, dataloader, optimizer, criterion, epoch, idx_to_c
     with tqdm(total=len(dataloader.dataset), unit="batch") as t:
         for batch_idx, (x_train_batch, y_train_batch, seq_lengths) in enumerate(dataloader):
 
-            x_train_batch, _ , seq_lengths = sort_batch(x_train_batch, y_train_batch, seq_lengths)
+            x_train_batch, y_train_batch, seq_lengths = sort_batch(x_train_batch, y_train_batch, seq_lengths)
             max_batch_size = int(seq_lengths[0])
 
-            data, target = x_train_batch.to(device), x_train_batch[:,:max_batch_size].to(device)
+            data, target = x_train_batch.to(device), y_train_batch.to(device)
             # pdb.set_trace()
             
 
@@ -183,7 +183,7 @@ def train(args, model, device, dataloader, optimizer, criterion, epoch, idx_to_c
             
             #The objective function is the negative log-likelihood function.
             # pdb.set_trace()
-            loss = criterion(output.view(-1, args.vocab_size)[:-1,:], target.view(-1)[1:])
+            loss = criterion(output, target)
 
             train_loss.append(loss.item())
             # pdb.set_trace()
@@ -194,10 +194,10 @@ def train(args, model, device, dataloader, optimizer, criterion, epoch, idx_to_c
             #This calculates the gradients (via backpropagation)
             loss.backward()
 
-            prediction = output.view(-1, args.vocab_size)[:-1,:].max(1)[1]
+            prediction = output.max(1)[1]
 
             # pdb.set_trace()
-            acc = prediction.eq(target.view(-1)[1:])
+            acc = prediction.eq(target)
 
             accuracy = float(acc.sum()) / float(acc.numel())#float(args.batchsize)
             train_accu.append(accuracy)
@@ -236,23 +236,23 @@ def test(args, model, device, test_dataloader, criterion, idx_to_class, outfile=
             
             x_test_batch, y_test_batch, seq_lengths = sort_batch(x_test_batch, y_test_batch, seq_lengths)
             max_batch_size = int(seq_lengths[0])
-            data, target = x_test_batch.to(device), x_test_batch[:,:max_batch_size].to(device)
+            data, target = x_test_batch.to(device), y_test_batch.to(device)
 
             if len(test_dataloader) - 1 == batch_idx:
                 hidden = None
 
             output, hidden = model(data, seq_lengths, hidden)
 
-            loss = criterion(output.view(-1, args.vocab_size)[:-1,:], target.view(-1)[1:])
+            loss = criterion(output, target)
 
             test_loss += loss.item()
 
             niter = batch_idx
             writer.add_scalar('loss', loss.item(), niter)
 
-            prediction = output.view(-1, args.vocab_size)[:-1,:].max(1)[1]
+            prediction = output.max(1)[1]
 
-            acc = prediction.eq(target.view(-1)[1:])
+            acc = prediction.eq(target)
 
             accuracy = acc.sum() / float(acc.numel()) #float(args.test_batchsize))
 
