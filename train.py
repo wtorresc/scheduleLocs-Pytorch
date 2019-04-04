@@ -16,9 +16,10 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 from torch.autograd import Variable
+from torch.nn.utils.rnn import pack_padded_sequence
 from tqdm import tqdm
 
-from model.Net_language_model import LocationRNN
+from model.Net import LocationRNN
 import model.data_loader as data_loader
 
 from tensorboardX import SummaryWriter
@@ -145,7 +146,7 @@ def get_args():
     return args
 
 
-def train(args, model, device, dataloader, optimizer, criterion, epoch, idx_to_class):
+def train(args, model, device, dataloader, optimizer, criterion, epoch):
     # set model to training mode
     model.train()
 
@@ -162,8 +163,7 @@ def train(args, model, device, dataloader, optimizer, criterion, epoch, idx_to_c
         for batch_idx, (x_train_batch, y_train_batch, seq_lengths) in enumerate(dataloader):
 
             x_train_batch, y_train_batch, seq_lengths = sort_batch(x_train_batch, y_train_batch, seq_lengths)
-            max_batch_size = int(seq_lengths[0])
-
+ 
             data, target = x_train_batch.to(device), y_train_batch.to(device)
             # pdb.set_trace()
             
@@ -180,6 +180,11 @@ def train(args, model, device, dataloader, optimizer, criterion, epoch, idx_to_c
             #Forward propagation of the model, i.e. calculate the hidden
             # units and the output.
             output, hidden  = model(data, seq_lengths, hidden)
+            # pdb.set_trace()
+
+            # pack_padded_sequence is a good trick to do this
+            output, _ = pack_padded_sequence(output, seq_lengths, batch_first=True)
+            target, _ = pack_padded_sequence(target, seq_lengths, batch_first=True)
             
             #The objective function is the negative log-likelihood function.
             # pdb.set_trace()
@@ -218,7 +223,7 @@ def train(args, model, device, dataloader, optimizer, criterion, epoch, idx_to_c
                           acc='{:04.2f}%'.format(np.mean(train_accu) * 100))
             t.update(args.batchsize)
 
-def test(args, model, device, test_dataloader, criterion, idx_to_class, outfile=None):
+def test(args, model, device, test_dataloader, criterion, outfile=None):
     # set model to test mode
     model.eval()
 
@@ -235,13 +240,16 @@ def test(args, model, device, test_dataloader, criterion, idx_to_class, outfile=
         for batch_idx, (x_test_batch, y_test_batch, seq_lengths) in enumerate(test_dataloader):
             
             x_test_batch, y_test_batch, seq_lengths = sort_batch(x_test_batch, y_test_batch, seq_lengths)
-            max_batch_size = int(seq_lengths[0])
+            # max_batch_size = int(seq_lengths[0])
             data, target = x_test_batch.to(device), y_test_batch.to(device)
 
             if len(test_dataloader) - 1 == batch_idx:
                 hidden = None
 
             output, hidden = model(data, seq_lengths, hidden)
+
+
+
 
             loss = criterion(output, target)
 
@@ -349,7 +357,7 @@ if __name__ == '__main__':
     args.vocab_size += 1 
     print(args.output_size)
 
-    idx_to_class, _ =  data_loader.get_classes(args.classses_file)
+    # idx_to_class, _ =  data_loader.get_classes(args.classses_file)
 
     # Load Model
     model = LocationRNN(args.vocab_size, args.output_size, args.embedding_dim, args.hidden_dim, args.n_layers)
@@ -365,56 +373,56 @@ if __name__ == '__main__':
                            lr=args.learning_rate,
                            weight_decay=args.weight_decay)
 
-    if args.resume:
-        if os.path.isfile(args.resume):
-            print("=> loading checkpoint '{}'".format(args.resume))
-            checkpoint = torch.load(args.resume)
-            args.start_epoch = checkpoint['epoch']
-            model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(args.resume, checkpoint['epoch']))
-        else:
-            print("=> no checkpoint found at '{}'".format(args.resume))
+    # if args.resume:
+    #     if os.path.isfile(args.resume):
+    #         print("=> loading checkpoint '{}'".format(args.resume))
+    #         checkpoint = torch.load(args.resume)
+    #         args.start_epoch = checkpoint['epoch']
+    #         model.load_state_dict(checkpoint['state_dict'])
+    #         optimizer.load_state_dict(checkpoint['optimizer'])
+    #         print("=> loaded checkpoint '{}' (epoch {})"
+    #               .format(args.resume, checkpoint['epoch']))
+    #     else:
+    #         print("=> no checkpoint found at '{}'".format(args.resume))
 
     scheduler = optim.lr_scheduler.StepLR(optimizer,
                                           step_size=10,
                                           gamma=0.1)
 
-    # print('Training for {} epoch(s)'.format(args.epochs))
+    print('Training for {} epoch(s)'.format(args.epochs))
 
-    # time_start = time.time()
+    time_start = time.time()
 
-    # logging.info('Training Start')
-    # #Train Model
-    # for epoch in range(1, args.epochs + 1):
-    #     scheduler.step()
-    #     train(args, model, device, train_dataloader, optimizer, criterion, epoch, idx_to_class)
+    logging.info('Training Start')
+    #Train Model
+    for epoch in range(1, args.epochs + 1):
+        scheduler.step()
+        train(args, model, device, train_dataloader, optimizer, criterion, epoch)
 
-    #     if epoch % 10 == 0:
-    #         print('Epoch: {}/{}'.format(epoch,args.epochs))
+        if epoch % 10 == 0:
+            print('Epoch: {}/{}'.format(epoch,args.epochs))
 
-    #         save_checkpoint({
-    #             'epoch': epoch,
-    #             'arch': 'bidirectional_LSTM',
-    #             'state_dict': model.state_dict(),
-    #             'optimizer' : optimizer.state_dict(),
-    #         })
+            save_checkpoint({
+                'epoch': epoch,
+                'arch': 'bidirectional_LSTM',
+                'state_dict': model.state_dict(),
+                'optimizer' : optimizer.state_dict(),
+            })
 
 
-    # time_end = time.time()
-    # training_time = time_end - time_start 
+    time_end = time.time()
+    training_time = time_end - time_start 
 
-    # print('Trainig Time: {}hr:{}min:{}s'.format(*time_me(training_time)))
+    print('Trainig Time: {}hr:{}min:{}s'.format(*time_me(training_time)))
 
-    evaluate = True
+    # evaluate = True
     
-    if evaluate: 
-        test(args, model, device, test_dataloader, criterion, idx_to_class, 'predictions.csv')
+    # if evaluate: 
+    #     test(args, model, device, test_dataloader, criterion, idx_to_class, 'predictions.csv')
     
-    predict = False
+    # predict = False
 
-    if predict:
-        predict(args, model, device, test_dataloader, criterion, idx_to_class, 'predictions.csv')
+    # if predict:
+    #     predict(args, model, device, test_dataloader, criterion, idx_to_class, 'predictions.csv')
 
-    writer.close()
+    # writer.close()

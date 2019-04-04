@@ -9,42 +9,41 @@ import json
 import pdb
 import itertools as it
 from collections import Counter, OrderedDict
-import nltk
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 
-def get_classes(labels_file):
-    """
-    Finds the class folders in a dataset.
-    Args:
-       dir (string): Root directory path.
-    Returns:
-       tuple: (classes, class_to_idx) where classes are relative to (dir), and class_to_idx is a dictionary.
-    Ensures:
-       No class is a subdirectory of another.
-    """
+# def get_classes(labels_file):
+#     """
+#     Finds the class folders in a dataset.
+#     Args:
+#        dir (string): Root directory path.
+#     Returns:
+#        tuple: (classes, class_to_idx) where classes are relative to (dir), and class_to_idx is a dictionary.
+#     Ensures:
+#        No class is a subdirectory of another.
+#     """
 
-    with open(labels_file) as f:
-        data = json.load(f, object_pairs_hook=OrderedDict)
-        data_dict = data['uniformat']
-        fieldnames = ('level_1','level_2','level_3', 'level_4','level_5')
-        labels = np.empty((len(data_dict), len(fieldnames)), dtype='<U8')
-        for idx, _ in enumerate(data_dict):
-            labels[idx] = list(data_dict[idx].values())
+#     with open(labels_file) as f:
+#         data = json.load(f, object_pairs_hook=OrderedDict)
+#         data_dict = data['uniformat']
+#         fieldnames = ('level_1','level_2','level_3', 'level_4','level_5')
+#         labels = np.empty((len(data_dict), len(fieldnames)), dtype='<U8')
+#         for idx, _ in enumerate(data_dict):
+#             labels[idx] = list(data_dict[idx].values())
 
-    Empty = '0'
-    classes = []
-    class_to_idx = []
+#     Empty = '0'
+#     classes = []
+#     class_to_idx = []
 
-    for i in range(len(fieldnames)):
-        classes.append(sorted(np.unique(labels[:,i]).tolist()))
-        classes[i].insert(0,Empty) #add a NONE class
-        class_to_idx.append({classes[i][j]: j for j in range(len(classes[i]))})
+#     for i in range(len(fieldnames)):
+#         classes.append(sorted(np.unique(labels[:,i]).tolist()))
+#         classes[i].insert(0,Empty) #add a NONE class
+#         class_to_idx.append({classes[i][j]: j for j in range(len(classes[i]))})
 
-    return classes, class_to_idx
+#     return classes, class_to_idx
 
 
-class uniformatDataset(Dataset):
+class LocationDataset(Dataset):
 
     # def __init__(self, x_data_to_process, y_data_to_process, seq_length):
     def __init__(self, seq_length, vocab_size, train=True):
@@ -64,26 +63,26 @@ class uniformatDataset(Dataset):
           for line in reader:
             line = json.loads(line, object_pairs_hook = OrderedDict)
 
-            x_train.append(nltk.word_tokenize(line['activity']))
-            y_train.append(list(line.values())[1:])
+            x_train.append(line['activity'])
+            y_train.append(line['target'])
 
-        if not train:
+        # if not train:
 
-            x_test = []
-            y_test = []
+        #     x_test = []
+        #     y_test = []
 
-            with io.open(os.path.expanduser(path_test), encoding="utf8") as f:
-              reader = f
-              for line in reader:
-                line = json.loads(line, object_pairs_hook = OrderedDict)
+        #     with io.open(os.path.expanduser(path_test), encoding="utf8") as f:
+        #       reader = f
+        #       for line in reader:
+        #         line = json.loads(line, object_pairs_hook = OrderedDict)
 
-                x_test.append(nltk.word_tokenize(line['activity']))
-                y_test.append(list(line.values())[1:])
+        #         x_test.append(nltk.word_tokenize(line['activity']))
+        #         y_test.append(line['target'])
             
-        # classes, class_to_idx = self._get_classes(y_train)
-        classes, class_to_idx = get_classes(labels_path)
+        classes, class_to_idx = self._get_classes(y_train)
+        # classes, class_to_idx = get_classes(labels_path)
 
-        self.classes_size = [len(class_i) for class_i in classes]
+        self.classes_size = len(classes)
 
         dataset_size = len(y_train)
 
@@ -112,11 +111,11 @@ class uniformatDataset(Dataset):
         
         for y_i in labels:
             encoded_label_i = []
-            for Level_i in range(NumLevels):
-                if y_i[Level_i] != None:
-                    encoded_label_i.append(class_to_idx[Level_i][y_i[Level_i]])
+            for y_ii in y_i:
+                if y_ii != None:
+                    encoded_label_i.append(class_to_idx[str(y_ii)])
                 else:
-                    encoded_label_i.append(class_to_idx[Level_i][Empty])
+                    encoded_label_i.append(class_to_idx['0'])
             encoded_labels.append(encoded_label_i)
 
         ### word_to_id and id_to_word. associate an id to every unique token in the training data
@@ -153,7 +152,7 @@ class uniformatDataset(Dataset):
 
         # remove 0-length reviews and their labels
         x_token_ids = [torch.LongTensor(x_token_ids[idx]) for idx in non_zero_idx]
-        encoded_labels = torch.LongTensor([encoded_labels[ii] for ii in non_zero_idx])
+        encoded_labels = [torch.LongTensor(encoded_labels[ii]) for ii in non_zero_idx]
 
         print('Number of reviews after removing outliers: ', len(x_token_ids))
 
@@ -169,6 +168,7 @@ class uniformatDataset(Dataset):
         # ordered_tensor  = sorted(x_train_token_ids, key=len, reverse=True)
         # padded_tensor = torch.nn.utils.rnn.pad_sequence(ordered_tensor, batch_first=True)
         padded_tensor = torch.nn.utils.rnn.pad_sequence(x_token_ids, batch_first=True)
+        padded_labels = torch.nn.utils.rnn.pad_sequence(encoded_labels, batch_first=True)
 
         # Set to zero indices above the vocab size
         padded_tensor[padded_tensor > vocab_size] = 0
@@ -179,6 +179,7 @@ class uniformatDataset(Dataset):
 
         ## test statements - do not change - ##
         assert len(padded_tensor)==len(x_token_ids), "Your features should have as many rows as reviews."
+        assert len(padded_tensor)==len(padded_labels), "Your features should have as many rows as reviews."
         '''
         Save this assertion for when you control the length of the sequences
         '''      
@@ -186,7 +187,7 @@ class uniformatDataset(Dataset):
         self.len = len(x_token_ids)
 
         self.features = padded_tensor #features
-        self.encoded_labels = encoded_labels
+        self.encoded_labels = padded_labels #encoded_labels
         self.seq_lengths = seq_lengths
 
     def __getitem__(self, index):
@@ -223,31 +224,25 @@ class uniformatDataset(Dataset):
         
         return features
 
-    # def _get_classes(self, labels):
-    #     """
-    #     Finds the class folders in a dataset.
-    #     Args:
-    #         dir (string): Root directory path.
-    #     Returns:
-    #         tuple: (classes, class_to_idx) where classes are relative to (dir), and class_to_idx is a dictionary.
-    #     Ensures:
-    #         No class is a subdirectory of another.
-    #     """
-    #     Empty = '0'
-    #     labels = np.array(labels)
-    #     # labels[labels == ''] = '0'
-    #     labels[labels == None] = Empty
-    #     NumLevels = 5
-    #     classes = []
-    #     class_to_idx = []
-    #     for i in range(NumLevels):
-    #       classes.append(sorted(np.unique(labels[:,i]).tolist()))
-    #       class_to_idx.append({classes[i][j]: j for j in range(len(classes[i]))})
+    def _get_classes(self, labels):
+        """
+        Finds the class folders in a dataset.
+        Args:
+            dir (string): Root directory path.
+        Returns:
+            tuple: (classes, class_to_idx) where classes are relative to (dir), and class_to_idx is a dictionary.
+        Ensures:
+            No class is a subdirectory of another.
+        """
+        classes = list(set(it.chain(*labels)))
+        classes = [str(i) for i in classes]
+        classes.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
+        class_to_idx = {classes[idx]: idx for idx in range(len(classes))}
 
-    #     return classes, class_to_idx
+        return classes, class_to_idx
 
 def get_traindata(args):
-    trainset = uniformatDataset(#data_dir = args.data_dir,
+    trainset = LocationDataset(#data_dir = args.data_dir,
                                 seq_length = 12,
                                 vocab_size = args.vocab_size,
                                 train = True                                
@@ -255,7 +250,7 @@ def get_traindata(args):
     return trainset
 
 def get_testdata(args):
-    testset = uniformatDataset(#data_dir = args.data_dir,
+    testset = LocationDataset(#data_dir = args.data_dir,
                                 seq_length = 12,
                                 vocab_size = args.vocab_size,
                                 train = False                                
@@ -300,8 +295,8 @@ def fetch_data(types, args):
     return dataloaders
 
 
-# if __name__ == '__main__':
-#     data = uniformatDataset(8)
+if __name__ == '__main__':
+    data = LocationDataset(8, 1000)
 #     # print(data.__getitem__(0))
 #     # for i in range(100):
 #     #   print(data.__getitem__(i))

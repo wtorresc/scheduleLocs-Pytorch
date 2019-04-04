@@ -30,13 +30,15 @@ class LocationRNN(nn.Module):
             batch_first: batch first option
 
         """
-        super(UniformatRNN_language_model, self).__init__()
+        super(LocationRNN, self).__init__()
 
         self.output_size = output_size
         self.n_layers = n_layers
         self.hidden_dim = hidden_dim
         self.use_last = use_last
         self.rnn_type = rnn_model
+        num_classes = 5
+        self.num_classes = 5
 
         self.encoder = nn.Embedding(vocab_size, embedding_dim, padding_idx=padding_index)
         
@@ -56,7 +58,7 @@ class LocationRNN(nn.Module):
         # dropout layer
         self.drop_de = nn.Dropout(p=0.5)
 
-        self.decoder = nn.Linear(2*hidden_dim, vocab_size)
+        self.decoder = nn.Linear(2*hidden_dim, num_classes)
 
     def init_weights(self):
         initrange = 0.1
