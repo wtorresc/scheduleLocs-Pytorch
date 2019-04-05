@@ -248,8 +248,9 @@ def test(args, model, device, test_dataloader, criterion, outfile=None):
 
             output, hidden = model(data, seq_lengths, hidden)
 
-
-
+            # pack_padded_sequence is a good trick to do this
+            output, _ = pack_padded_sequence(output, seq_lengths, batch_first=True)
+            target, _ = pack_padded_sequence(target, seq_lengths, batch_first=True)
 
             loss = criterion(output, target)
 
