@@ -57,8 +57,8 @@ def get_args():
     parser.add_argument('--epochs',
                         '-E',
                         type=int,
-                        default=25,
-                        help='Define the number of epochs (default: 10)')
+                        default=5,
+                        help='Define the number of epochs (default: 5)')
 
     parser.add_argument('--learning-rate',
                         '-LR',
@@ -124,9 +124,9 @@ def get_args():
 
     parser.add_argument('--n-layers',
                         type=int,
-                        default=3,
+                        default=2,
                         metavar='N',
-                        help='Number of LSTM layers in the network (default: 3)')
+                        help='Number of LSTM layers in the network (default: 2)')
     
     parser.add_argument('--resume',
                         '-R',
@@ -157,6 +157,11 @@ def train(args, model, device, dataloader, optimizer, criterion, epoch):
     # initialize hidden state
     hidden = model.init_hidden(args.batchsize)    
     # pdb.set_trace()
+
+    num_classes = 5
+    if (epoch-1)%10 == 0:
+        confusion_matrix= np.zeros((num_classes,num_classes),dtype=np.int32)
+
 
     # Use tqdm for progress bar
     with tqdm(total=len(dataloader.dataset), unit="batch") as t:
@@ -204,6 +209,9 @@ def train(args, model, device, dataloader, optimizer, criterion, epoch):
             # pdb.set_trace()
             acc = prediction.eq(target)
 
+            if (epoch-1)%10 == 0:
+                confusion_matrix[target.cpu().numpy(),prediction.cpu().numpy()] += 1
+
             accuracy = float(acc.sum()) / float(acc.numel())#float(args.batchsize)
             train_accu.append(accuracy)
 
@@ -222,6 +230,13 @@ def train(args, model, device, dataloader, optimizer, criterion, epoch):
             t.set_postfix(loss='{:05.3f}'.format(loss.item()),
                           acc='{:04.2f}%'.format(np.mean(train_accu) * 100))
             t.update(args.batchsize)
+
+        if (epoch-1)%10 == 0:
+
+            #Normalize confusion matrices
+            confusion_matrix = np.divide(confusion_matrix, np.sum(confusion_matrix,axis=1,keepdims=True), out=np.zeros_like(confusion_matrix, dtype=np.float32), where=np.sum(confusion_matrix,axis=1,keepdims=True)!=0)
+            print(confusion_matrix)
+            # writer.add_figure('matplotlib/confusion_matrix', plot_confusion(confusion_matrix, idx_to_class[0]), epoch)
 
 def test(args, model, device, test_dataloader, criterion, outfile=None):
     # set model to test mode
@@ -415,6 +430,8 @@ if __name__ == '__main__':
     training_time = time_end - time_start 
 
     print('Trainig Time: {}hr:{}min:{}s'.format(*time_me(training_time)))
+
+    torch.save(model.state_dict(), 'locations_model.pth.tar')
 
     # evaluate = True
     

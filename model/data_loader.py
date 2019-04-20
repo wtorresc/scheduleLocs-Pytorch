@@ -137,6 +137,9 @@ class LocationDataset(Dataset):
         if train:
             x_train_token_ids = [[word_to_id.get(token,0) for token in x] for x in x_train]
             x_token_ids = x_train_token_ids
+
+            ## save dictionary
+            np.save('preprocessed_data/id2word_dictionary.npy',np.asarray(vocab))
         else:
             x_test_token_ids = [[word_to_id.get(token,0) for token in x] for x in x_test]
             x_token_ids = x_test_token_ids
