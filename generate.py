@@ -126,12 +126,13 @@ def predict(args, model, device, test_dataloader, outfile=None):
 
             prediction = output.max(1)[1]
             
-            print(prediction)
+            # print(prediction)
             prediction_matrix, _ = pad_packed_sequence(PackedSequence(prediction,batch_sizes))
             prediction_matrix = prediction_matrix[:,unperm_idx].cpu().numpy()
             # prediction_matrix = prediction.view(max_batch_size,-1).cpu().numpy()
             prediction_arr = [prediction_matrix[:seq_length_i, idx].tolist() for idx, seq_length_i in enumerate(seq_lengths[unperm_idx])]
-            pdb.set_trace()
+            # print(prediction_arr)
+            # pdb.set_trace()
             # hidden = repackage_hidden(hidden)
 
     if outfile:
